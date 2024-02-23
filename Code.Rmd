@@ -1,0 +1,212 @@
+---
+title: "code1"
+author: "Nadashree Bose"
+date: '2023-09-29'
+output: html_document
+---
+
+```{r}
+#clear all the workspaces and set the path
+rm(list=ls())
+setwd("E:/RESEARCH/Manuscript/Latex_Manuscript")
+```
+
+```{r}
+#install all the dependencies
+library(glmnet)
+library(pscl)
+library(car)
+library(aod)
+library(caret)
+library(lmtest)
+```
+
+```{r}
+#read the data
+file = read.csv('file1.csv')[,-1]
+head(file)
+```
+
+```{r}
+# print the dimension of the data
+dim(file)
+```
+The dataset contains 495 samples and 13 columns.  
+
+```{r}
+# print the data-types
+str(file)
+```
+
+```{r}
+# change the categorical data-types into factors
+file$sex = as.factor(file$sex)
+file$bmi = as.factor(file$bmi)
+file$phstat = as.factor(file$phstat)
+file$medication = as.factor(file$medication)
+file$traffic = as.factor(file$traffic)
+file$behaviour = as.factor(file$behaviour)
+file$dental = as.factor(file$dental)
+file$asthma = as.factor(file$asthma)
+file$diabetes = as.factor(file$diabetes)
+```
+
+```{r}
+# again print the data-types to ensure
+str(file)
+```
+
+```{r}
+# print the summary statistics'
+summary(file)
+```
+The data consists of 495 samples of children from the age group of 10 - 18. The question of interest here is to know how many times a child has gone to a hospital emergency about his/her health during the past twelve months. Among the children 61% are male and 39% are female. The minimum height is calculated as 43 inches and maximum is 96 inches. The distribution of weight lies between 50 pounds (minimum) to 996 pounds (maximum). 
+```{r}
+dummy <- dummyVars(" ~ .", data=file)
+
+#perform one-hot encoding on data frame
+df <- data.frame(predict(dummy, newdata=file))
+
+#view final data frame
+df
+```
+
+```{r}
+my_table = table(df$visits)
+my_table
+barplot(my_table, 
+        ylim = c(0,400), 
+        xlab = "Emergency Room Visits by Children (between 10 - 18 years of Age)",
+        ylab = "Frequency",
+        col = "grey",
+        border = "gray",
+        width = 0.02)
+grid(nx = NA, ny = NULL, lwd = 1, lty = 1, col = "gray")
+```
+
+
+```{r}
+lm_model = lm(visits~., data = df)
+summary(lm_model)
+```
+
+```{r}
+shapiro.test(lm_model$residuals)
+```
+
+```{r}
+pglm_full = glm(visits ~ ., data = df, family = 'poisson')
+summary(pglm_full)
+```
+```{r}
+length(coef(pglm_full))
+```
+
+
+```{r}
+mse_pglm_full = mean(pglm_full$residuals^2)
+cat("The MSE for the Poisson GLM Model: ", mse_pglm_full)
+```
+
+```{r}
+df_new = df[, c(-3, -19, -23, -35, -37, -39)]
+head(df_new)
+```
+
+
+```{r}
+pglm_full1 = glm(visits ~ ., data = df_new, family = 'poisson')
+summary(pglm_full1)
+```
+
+```{r}
+df_new1 = df_new[, c(-8, -15)]
+```
+
+```{r}
+pglm_full2 = glm(visits~., data = df_new1, family = "poisson")
+summary(pglm_full2)
+```
+```{r}
+length(coef(pglm_full2))
+```
+
+```{r}
+attach(df_new1)
+pglm_red1 = glm(visits ~ medication.1 + medication.2 + dental.1 + dental.2 + dental.3 + dental.4 + dental.8 + asthma.1 + diabetes.1, data = df_new1, family = 'poisson')
+summary(pglm_red1)
+```
+
+```{r}
+poi = summary(pglm_red1)
+poi = as.data.frame(poi$coefficients)
+write.csv(poi, file = "Poisson Regression Model Results.csv")
+```
+
+
+```{r}
+lrtest(pglm_full2, pglm_red1)
+```
+
+
+```{r}
+mse_pglm_red1 = mean(pglm_red1$residuals^2)
+cat("The MSE for the Poisson GLM Model: ", mse_pglm_red1)
+```
+
+```{r}
+zip_model = zeroinfl(visits ~ medication.1 + medication.2 + dental.1 + dental.2 + dental.3 + dental.4 + dental.8 + asthma.1 + diabetes.1, link = 'logit', dist = 'poisson', data = df_new1)
+summary(zip_model)
+```
+```{r}
+summ = summary(zip_model)
+summ = as.data.frame(summ$coefficients)
+```
+
+
+```{r}
+write.csv(summ, file = 'zip_model_summary.csv')
+```
+
+
+```{r}
+mse_zip = mean(zip_model$residuals^2)
+cat("The MSE for the ZIP Model is: ", mse_zip)
+```
+
+```{r}
+AIC(pglm_red1)
+```
+
+```{r}
+AIC(zip_model)
+```
+
+# Report  
+The regression was first performed with all the 39 variables. Among them 9 variables were chosen based on their significance. Those variables were, "medication.1", "medication.2", "dental.1", "dental.2", "dental.3", "dental.4", "dental.8", "asthma.1", "diabetes.1".  
+
+The significance of these variables were assessed with the help of Lagrange Multiplier Test or the Likelihood Ratio Test, which gave a p-value of 0.9975 (>0.05).  
+
+The same variables were taken and fit into both the poisson regression model and ZIP regression model and the summary is shown in the tables.  
+All the variables for the poisson regression model and the count part of the ZIP regression model came as significant based on the p-value, as it is less than 0.05.  
+
+The performance of the models were evaluated in terms of MSE and AIC value and the table shows that in terms of Mean Squared Error (MSE) and Akaike Information Criteria (AIC) values the ZIP regression performs better than the poisson regression model.  
+
+Hence, in the presence of over-dispersion in the count dependent variable, a zero-inflated poisson regression model better explains the overabundance of zeroes than the general poisson regression model.  
+
+The count part of the zero inflated poisson regression model is -  
+
+visits = 3.8255-2.8801(medication.1)-2.4592(medication.2)-1.7460(dental.1)-3.2634(dental.2)-2.5735(dental.3)-2.1969(dental.4)-1.7460(dental.8)+0.8306(asthma.1)+1.2960(diabetes.1)  
+
+Asthma.1 and diabetes.1 have positive signs, indicating an positive change in these factor induces an increase of number of visits at the emergency room by children of age 10-18. The number of positive signs are as the same with the poisson regression model. However, there are differences in the percentage changes. The percentage change in medication.2 for the poisson regression model is -97% and for the ZIP model is -91%, indicating those who could afford medication did not have to visit the emergency room that often than those who haven't. Same in asthma.1 and diabetes.1 the percentage of change for poisson regression model and ZIP regression model are 543%, 976% and 129%, 265% respectively. It indicates those who had visited the emergency room of a hospital due to asthma in the past 12 months have higher chance of getting admitted against than those who did not go and for those who ever had diabetes had greater chance of visiting the emergency room against those who did not ever have diabetes.  
+
+Odds ratio can be regarded while interpreting the parameters of the zero outcomes model. The odds ration in dental.2 is almost 100%, indicating those who did not have any dental clinic visit within last 2 years, have 100% higher probability of visiting the emergency room than the others.  
+
+By all these observations we can claim easily that the ZIP regression model outperforms the poisson regression model in fitting the number of visits at the emergency room of a hospital.  
+
+
+
+```{r}
+(exp(-16.81431523) - 1)*100
+```
+
